@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+      <meta charset="utf-8" />
+      <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>Car service</title>
+    
+      <!--<link href="bootstrap/css/bootstrap.min.css" rel="stylesheet" /> -->    
+      <link rel="stylesheet" href="bootstrap.min.css">
+          
+      <style>
+          html { height: 100% }
+          body { height: 100%; margin: 2px }
+          #map-container {           
+              height: 100%;
+              margin: 2px;    
+              display: block; }        
+      </style>
+           
+      <script src="jquery.min.js"></script>              
+      <script src="http://api-maps.yandex.ru/2.0/?load=package.full&lang=ru-RU" type="text/javascript"></script>
+      <script src="http://api-maps.yandex.ru/2.1/?lang=ru_RU" type="text/javascript"></script>
+      <script>
+
+          var d = document;
+          //var baseUrl = 'http://192.168.0.65:14151/';
+          var baseUrl = 'http://217.148.217.170:14151/';
+          var loginUrl = baseUrl + 'Login';
+          var geoLocationUrl = baseUrl + 'GetLocation';
+          var setSecurityUrl = baseUrl + 'SaveSecurity';
+          var setSettingsUrl = baseUrl + 'SaveSettings';
+          var isSecurityUrl = baseUrl + 'IsSecurity';
+          var getCarSettingsUrl = baseUrl + 'GetCarSettings';
+
+          var requestProvider = new HttpJsonRequestProvider();
+
+          var serverAddressKey = "serverAddressKey";
+          var portKey = "portKey";
+          var loginKey = "loginKey";
+          var passwordKey = "passwordKey";
+          var serialNoKey = "serialNoKey";
+          var securityKey = "securityKey"; //поставлено ли на охрану
+          var isEmailNotificationKey = "isEmailNotificationKey";
+          var emailNotificationKey = "emailNotificationKey";
+          var isSmsNotificationKey = "isSmsNotificationKey";
+          var telephoneNumberKey = "telephoneNumberKey";
+          var minTimeKey = "minTimeKey";
+          var minMileageKey = "minMileageKey";
+          var smsApiKey = "smsApiKey";
+          
+          //localStorage.clear();
+          // Как только будет загружен API и готов DOM, выполняем инициализацию
+          ymaps.ready(init);
+          var map;
+          function init() {
+              // Создание экземпляра карты и его привязка к контейнеру с
+              // заданным id ("map")
+              map = new ymaps.Map('map-container', {
+                  // При инициализации карты, обязательно нужно указать ее центр и коэффициент масштабирования                  
+                  center: [59.97895050048828, 30.337480545043945],
+                  zoom: 12
+              });              
+          }
+
+          function bntLogin() {
+
+              var serverAddress = d.getElementById('idServerAddress').value;
+              var port = d.getElementById('idPort').value;
+              var login = d.getElementById('idLogin').value;
+              var password = d.getElementById('idPassword').value;
+              var serialNo = d.getElementById('idSerialNo').value;
+
+              localStorage.setItem(serverAddressKey, serverAddress);
+              localStorage.setItem(portKey, port);
+              localStorage.setItem(loginKey, login);
+              localStorage.setItem(passwordKey, password);
+              localStorage.setItem(serialNoKey, serialNo);
+              localStorage.setItem(minTimeKey, "05:10");
+              localStorage.setItem(minMileageKey, 100);              
+              
+              var request = generateLoginRequest();
+
+              if (login == "" || password == "" ||
+                  serverAddress == "" || port == "" ||
+                  serialNo == "") {
+                  alert("Не все поля заполнены");
+              } else {
+                  //отправляем запрос
+                  var response = loginFromServer(request).response;
+                  if (response == true) {
+                      $('#loginModel').modal('hide');
+                      d.getElementById('idGetLocationBtn').disabled = false;
+                      d.getElementById('idSecurity').disabled = false;
+                      d.getElementById('idSettingsBtn').disabled = false;
+                  } else {
+                      alert('Не верно введены данные');
+                  }
+              }
+          }
+
+          function changeLogin() {
+              
+              d.getElementById('idServerAddress').value = localStorage.getItem(serverAddressKey);
+              d.getElementById('idPort').value = localStorage.getItem(portKey);
+              d.getElementById('idLogin').value = localStorage.getItem(loginKey);
+              d.getElementById('idPassword').value = localStorage.getItem(passwordKey);
+              d.getElementById('idSerialNo').value = localStorage.getItem(serialNoKey);
+
+              $('#loginModel').modal('show');
+          }
+
+          function showSettings() {
+
+              //вызвать метод который возвращает carSettings
+              var request = generateLocationRequest();
+              var response = getCarSettingsFromServer(request).response;
+
+              if (response != null) {
+                  
+                  localStorage.setItem(isEmailNotificationKey, response.IsEmailNotification);
+                  localStorage.setItem(isSmsNotificationKey, response.IsSmsNotification);
+                  localStorage.setItem(minTimeKey, response.MinTime);
+                  localStorage.setItem(minMileageKey, response.MinMileage);
+                  localStorage.setItem(telephoneNumberKey, response.Telephone);
+                  localStorage.setItem(emailNotificationKey, response.Email);
+                  localStorage.setItem(smsApiKey, response.SmsApiKey);
+              } else {
+                  //если поменяли логин пароль
+                  //то открыть модуль логина и закрыть настройки
+                  $('#settingsModal').modal('hide');
+                  $('#loginModel').modal('show');
+              }
+
+              d.getElementById('idIsEmailNotificationS').checked = localStorage.getItem(isEmailNotificationKey) == "true";
+              d.getElementById('idEmailNotificationS').value = localStorage.getItem(emailNotificationKey);
+              d.getElementById('idIsSmsNotificationS').checked = localStorage.getItem(isSmsNotificationKey) == "true";
+              d.getElementById('idTelephoneNumberS').value = localStorage.getItem(telephoneNumberKey);
+              d.getElementById('idSmsApiKey').value = localStorage.getItem(smsApiKey);
+              d.getElementById('idMinTimeS').value = localStorage.getItem(minTimeKey);
+              d.getElementById('idMinMileageS').value = localStorage.getItem(minMileageKey);
+              d.getElementById('idSmsApiKey').value = localStorage.getItem(smsApiKey);
+
+              $('#settingsModal').modal('show');              
+          }
+
+          function generateSettingsRequest() {
+              
+              localStorage.setItem(isEmailNotificationKey, d.getElementById('idIsEmailNotificationS').checked);
+              localStorage.setItem(emailNotificationKey, d.getElementById('idEmailNotificationS').value);
+              localStorage.setItem(isSmsNotificationKey, d.getElementById('idIsSmsNotificationS').checked);
+              localStorage.setItem(telephoneNumberKey, d.getElementById('idTelephoneNumberS').value);
+              localStorage.setItem(smsApiKey, d.getElementById('idSmsApiKey').value);
+              localStorage.setItem(minTimeKey, d.getElementById('idMinTimeS').value);
+              localStorage.setItem(minMileageKey, d.getElementById('idMinMileageS').value);
+              localStorage.setItem(smsApiKey, d.getElementById('idSmsApiKey').value);
+              
+              var minTime = "00:" + localStorage.getItem(minTimeKey);
+
+              return {
+                  Login: localStorage.getItem(loginKey),
+                  Password: localStorage.getItem(passwordKey),                  
+                  SerialNo: localStorage.getItem(serialNoKey),
+                  IsEmailNotification: localStorage.getItem(isEmailNotificationKey) == "true",
+                  IsSmsNotification: localStorage.getItem(isSmsNotificationKey) == "true",
+                  MinTime: minTime,
+                  MinMileage: localStorage.getItem(minMileageKey),
+                  Telephone: localStorage.getItem(telephoneNumberKey),
+                  Email: localStorage.getItem(emailNotificationKey),
+                  SmsApiKey: localStorage.getItem(smsApiKey)
+              };
+          }
+
+          function saveSettings() {
+              
+              var request = generateSettingsRequest();
+
+              //отправляем запрос
+              var response = setSettingsFromServer(request).response;
+
+              $('#settingsModal').modal('hide');
+          }          
+
+          function getLocation() {
+              //формируем запрос
+              var request = generateLocationRequest();
+
+              //отправляем запрос
+              var response = getGeoLocationFromServer(request).response;
+              if (response.ErrorInfo == null) {
+
+                  var lat = response.LastPoint.Lat;
+                  var lon = response.LastPoint.Lon;
+                  d.getElementById('idDt').innerHTML = response.LastPoint.DateTime;
+                  d.getElementById('idN').innerHTML = response.AlarmDateTime;
+                  d.getElementById('idM').innerHTML = response.AlarmMessage;
+                  myPlacemark = new ymaps.Placemark([lat, lon], {                      
+                      //iconContent: DateM
+                  });
+
+                  map.geoObjects.add(myPlacemark);
+                  map.setCenter([response.LastPoint.Lat, response.LastPoint.Lon], 16);
+              } else {
+
+                  //d.getElementById('idError').innerHTML = response.ErrorInfo;
+              }
+          }
+
+          function setSecurity() {
+
+              var isSecurity = false;
+              
+              if (d.getElementById('idSecurity').innerText == "Охрана") {
+
+                  d.getElementById('idSecurity').innerText = "Снять с охраны";
+                  isSecurity = true;                  
+              } else {
+
+                  d.getElementById('idSecurity').innerText = "Охрана";
+                  isSecurity = false;                  
+              }
+
+              var request = generateSecurityRequest(isSecurity);
+              var response = setSecurityFromServer(request).response;
+          }
+
+          function init2() {
+              
+              if (localStorage.getItem(serverAddressKey) == null || localStorage.getItem(serverAddressKey) == "" ||
+                  localStorage.getItem(portKey) == null || localStorage.getItem(portKey) == "" ||
+                  localStorage.getItem(loginKey) == null || localStorage.getItem(loginKey) == "" ||
+                  localStorage.getItem(passwordKey) == null || localStorage.getItem(passwordKey) == "" ||
+                  localStorage.getItem(serialNoKey) == null || localStorage.getItem(serialNoKey) == "") {
+
+                  $('#loginModel').modal();
+              } else {
+                  
+                  var res = isSecurityFromServer(localStorage.getItem(serialNoKey)).response;
+                  if (res == true) {
+
+                      d.getElementById('idSecurity').innerText = "Снять с охраны";
+                  }
+                  if (res != undefined) {
+                      d.getElementById('idGetLocationBtn').disabled = false;
+                      d.getElementById('idSecurity').disabled = false;
+                      d.getElementById('idSettingsBtn').disabled = false;
+                  }
+              }
+          }
+
+          function loginFromServer(request) {
+              return requestProvider.POST(loginUrl,
+                  request);
+          }
+
+          function getGeoLocationFromServer(request) {
+              return requestProvider.POST(geoLocationUrl,
+                  request);
+          }
+
+          function setSecurityFromServer(request) {
+              return requestProvider.POST(setSecurityUrl,
+                  request);
+          }
+
+          function setSettingsFromServer(request) {
+              return requestProvider.POST(setSettingsUrl,
+                  request);
+          }
+
+          function isSecurityFromServer(request) {
+              return requestProvider.POST(isSecurityUrl,
+                  request);
+          }
+
+          function getCarSettingsFromServer(request) {
+              return requestProvider.POST(getCarSettingsUrl,
+                  request);
+          }
+
+
+          function generateLoginRequest() {
+              return {
+                  Login: localStorage.getItem(loginKey),
+                  Password: localStorage.getItem(passwordKey),
+                  ServerAddress: localStorage.getItem(serverAddressKey),
+                  ServerPort: localStorage.getItem(portKey),
+                  SerialNo: localStorage.getItem(serialNoKey),
+              };
+          }
+
+          function generateLocationRequest() {
+              return {
+                  Login: localStorage.getItem(loginKey),
+                  Password: localStorage.getItem(passwordKey),
+                  SerialNo: localStorage.getItem(serialNoKey),
+              };
+          }
+
+          function generateSecurityRequest(isSecurity) {
+              
+              return {
+                  Login: localStorage.getItem(loginKey),
+                  Password: localStorage.getItem(passwordKey),
+                  IsSecurityMode: isSecurity,
+                  SerialNo: localStorage.getItem(serialNoKey),
+              };
+          }          
+
+
+          function HttpJsonRequestProvider() {
+
+              //создаем объект, позволяющий делать HTTP-запросы
+              var xmlhttp = new XMLHttpRequest();
+
+              // url - ссылка на ресурс
+              // sendData - данные для отправки
+              // method - метод запроса ('GET', 'POST', 'PUT'...)
+              //   Если method не был задан, то будет выполнен POST-запрос.
+              // Поле url - обязательное.
+              // Метод sendRequest возвращает результат запроса {status, response}.
+              var sendRequest = function (url, sendData, method, authorizationToken) {
+                  if (!url)
+                      throw new Error('Url required.');
+                  //если метод не передан, то подразумевается POST
+                  method = method || "POST";
+                  //если sendData не строка, то делаем из нее или пустого объекта строку
+                  if (!(typeof sendData == 'string' || sendData instanceof String)) {
+                      sendData = JSON.stringify(sendData || {});
+                  }
+
+                  //создаем соединение
+                  xmlhttp.open(method, url, false);
+                  //задаем header
+                  xmlhttp.setRequestHeader("Accept", "json");
+                  xmlhttp.setRequestHeader("Content-Type", "application/json");
+                  //если приложен authorizationToken
+                  if (authorizationToken) {
+                      xmlhttp.setRequestHeader("ScoutAuthorization", authorizationToken);
+                  }
+                  try {
+                      //отправляем
+                      xmlhttp.send(sendData);
+                  } catch (e) {
+                      alert("Сервис не доступен");
+                  }
+
+                  //возвращаем статус и тело ответа
+                  var responseText = xmlhttp.responseText;
+                  var parsedJson;
+                  if (responseText) {
+                      try {
+                          //создаем объект из полученного JSON
+                          parsedJson = JSON.parse(responseText);
+                      } catch (e) {
+                          alert("Incorrect JSON response from server");
+                      }
+                  }
+                  return {
+                      status: xmlhttp.status,
+                      response: parsedJson
+                  };
+              };
+
+              // url - ссылка на ресурс
+              // sendData - данные для отправки
+              // method - метод запроса ('GET', 'POST', 'PUT'...)
+              //   Если method не был задан, то будет выполнен POST-запрос.
+              // callback - метод, вызывающийся при получении ответа от сервера. Возвращает responseText и status
+              // Поле url - обязательное.
+              var RequestAsync = function (url, sendData, method, authorizationToken, callback) {
+                  if (!url)
+                      throw new Error('Url required.');
+                  //если метод не передан, то подразумевается POST
+                  method = method || 'POST';
+                  //если sendData не строка, то делаем из нее или пустого объекта строку
+                  if (!(typeof sendData == 'string' || sendData instanceof String)) {
+                      sendData = JSON.stringify(sendData || {});
+                  }
+
+                  //создаем соединение
+                  xmlhttp.open(method, url, callback);
+                  //подключаем callback-функцию
+                  xmlhttp.onreadystatechange = function () {
+                      //Completed
+                      if (xmlhttp.readyState == 4) {
+                          var responseText = xmlhttp.responseText;
+                          var parsedJson;
+                          if (responseText) {
+                              try {
+                                  parsedJson = JSON.parse(responseText);
+                              } catch (e) {
+                                  alert("Incorrect JSON response from server");
+                              }
+                          }
+                          callback(parsedJson, xmlhttp.status);
+                      }
+                  };
+                  //задаем header
+                  xmlhttp.setRequestHeader("Accept", "json");
+                  xmlhttp.setRequestHeader("Content-Type", "application/json");
+                  //если приложен authorizationToken
+                  if (authorizationToken) {
+                      xmlhttp.setRequestHeader("ScoutAuthorization", authorizationToken);
+                  }
+                  //отправляем
+                  xmlhttp.send(sendData);
+              };
+
+              this.GET = function (url, sendData) {
+                  return sendRequest(url, sendData, 'GET');
+              };
+
+              this.POST = function (url, sendData) {
+                  return sendRequest(url, sendData, 'POST');
+              };
+
+              this.GETAuthorized = function (url, sendData, authorizationToken) {
+                  return sendRequest(url, sendData, 'GET', authorizationToken);
+              };
+
+              this.POSTAuthorized = function (url, sendData, authorizationToken) {
+                  return sendRequest(url, sendData, 'POST', authorizationToken);
+              };
+
+              this.GETAsync = function (url, sendData, callback) {
+                  return RequestAsync(url, sendData, 'GET', null, callback);
+              };
+
+              this.POSTAsync = function (url, sendData, callback) {
+                  return RequestAsync(url, sendData, 'POST', null, callback);
+              };
+
+              this.GETAuthorizedAsync = function (url, sendData, authorizationToken, callback) {
+                  return RequestAsync(url, sendData, 'GET', authorizationToken, callback);
+              };
+
+              this.POSTAuthorizedAsync = function (url, sendData, authorizationToken, callback) {
+                  return RequestAsync(url, sendData, 'POST', authorizationToken, callback);
+              };
+          }
+
+      </script>    
+  </head>
+    <body onload="init2()">
+        
+        <div class="container-fluid">
+             
+            <div class="btn-group btn-group-justified" role="group" aria-label="...">
+                <div class="btn-group" role="group">
+                    <button type="button" id="idGetLocationBtn" onclick="getLocation()" disabled="true" class="btn btn-default">Машина</button>
+                </div>
+             
+                <div class="btn-group" role="group">
+                    <button type="button" id="idSecurity" onclick="setSecurity()" disabled="true" class="btn btn-default">Охрана</button>
+                </div>
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-default" id="idSettingsBtn" data-toggle="modal" disabled="true" onclick="showSettings()">Настройки</button>
+                </div>                          
+                                
+            </div>
+            
+            <span class="label label-primary">Время последней точки</span>
+            <span id="idDt" class="label label-default">...</span>
+            <span class="label label-primary">Время последнего уведомления</span>
+            <span id="idN" class="label label-default">...</span>
+            <span class="label label-primary">Сообщение уведомления</span>
+            <span id="idM" class="label label-default">...</span>
+            
+            
+            <button type="button" class="btn btn-primary btn-xs pull-right" onclick="changeLogin()">Настройки подключения</button>
+        </div>
+        <div id="map-container" ></div>
+        
+        <!-- Настройки -->
+        <div class="modal fade" id="settingsModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                        <h4 class="modal-title" id="myModalLabel">Настройки</h4>
+                    </div>
+                    <div class="modal-body">                        
+                        <div class="form-group">
+                            <div class="checkbox">
+                                <label>
+                                    <input id="idIsEmailNotificationS" type="checkbox"> Email notification
+                                </label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <input type="text" id="idEmailNotificationS" class="form-control" placeholder="Email" aria-describedby="basic-addon1">
+                        </div>
+                        <div class="form-group">
+                            <div class="checkbox">
+                                <label>
+                                    <input id="idIsSmsNotificationS" type="checkbox"> Sms notification
+                                </label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <input type="text" id="idTelephoneNumberS" class="form-control" placeholder="Telephone number" aria-describedby="basic-addon1">
+                        </div>
+                        <div class="form-group">
+                            <table>
+                                <tr>     
+                                    <td>
+                                        <div class="checkbox">
+                                            <label>
+                                                <input type="time" id="idMinTimeS" class="form-control" value="05:10" >
+                                            </label>
+                                        </div>
+                                    </td>
+                                    <td> &nbsp;&nbsp;&nbsp;Minimal time</td>
+                                </tr> 
+                            </table>
+                        </div>
+                        <div class="form-group">
+                            <input type="text" id="idMinMileageS" class="form-control" placeholder="minimal mileage" aria-describedby="basic-addon1">
+                        </div>
+                        <div class="form-group">
+                            <input type="text" id="idSmsApiKey" class="form-control" placeholder="Sms secret code" aria-describedby="basic-addon1">
+                        </div>
+                    </div>
+                    <div class="modal-footer">                        
+                        <button type="button" class="btn btn-primary" onclick="saveSettings()">Сохранить</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Login -->
+        <div class="modal fade" id="loginModel" tabindex="-1" role="dialog" aria-labelledby="myModalLabel1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                        <h4 class="modal-title" id="H1">Настройки подключения</h4>
+                    </div>
+                    <div class="modal-body">
+                        <form>
+                            <div class="form-group">                                
+                                <input type="text" id="idServerAddress" class="form-control" placeholder="IP" aria-describedby="basic-addon1">
+                            </div>
+                            <div class="form-group">
+                                <input type="text" id="idPort" class="form-control" placeholder="Port" aria-describedby="basic-addon1">
+                            </div>
+                            <div class="form-group">
+                                <input type="text" id="idLogin" class="form-control" placeholder="Login" aria-describedby="basic-addon1">
+                            </div> 
+                            <div class="form-group">
+                                <input type="text" id="idPassword" class="form-control" placeholder="Password" aria-describedby="basic-addon1">
+                            </div>
+                            <div class="form-group">
+                                <input type="text" id="idSerialNo" class="form-control" placeholder="SerialNo" aria-describedby="basic-addon1">
+                            </div>                                                   
+                        </form>                                                
+                    </div>
+                    <div class="modal-footer">                        
+                        <button type="button" class="btn btn-primary" onclick="bntLogin()">Войти</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+            
+        <script src="bootstrap.min.js"></script> 
+        <!--<script src="bootstrap/js/bootstrap.min.js"></script>   -->
+    </body>
+</html>
